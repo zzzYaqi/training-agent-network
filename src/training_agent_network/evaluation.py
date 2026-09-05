@@ -5,6 +5,7 @@ from __future__ import annotations
 from statistics import mean
 from typing import Any
 
+from .messages import GroupMessage, MessageType
 from .models import DecisionTrace, TaskResult
 
 
@@ -77,14 +78,54 @@ def outcome_metrics(results: list[TaskResult]) -> dict[str, float]:
     }
 
 
+def group_mechanism_metrics(messages: list[GroupMessage]) -> dict[str, Any]:
+    """Measure actual protocol events, rather than trusting a method label."""
+
+    task_ids = sorted(
+        {
+            message.task_id
+            for message in messages
+            if message.message_type is MessageType.TASK_POSTED and message.task_id
+        }
+    )
+    closed_loops = []
+    proposal_counts = []
+    for task_id in task_ids:
+        task_messages = [message for message in messages if message.task_id == task_id]
+        types = {message.message_type for message in task_messages}
+        closed_loops.append(
+            {
+                MessageType.TASK_POSTED,
+                MessageType.PROPOSAL,
+                MessageType.COMMITMENT,
+                MessageType.RESULT,
+                MessageType.VERIFICATION,
+            }.issubset(types)
+        )
+        proposal_counts.append(
+            sum(message.message_type is MessageType.PROPOSAL for message in task_messages)
+        )
+    return {
+        "tasks_observed": len(task_ids),
+        "closed_loop_rate": _rate(closed_loops),
+        "average_proposals_per_task": mean(proposal_counts) if proposal_counts else 0.0,
+        "delegation_events": sum(
+            message.message_type is MessageType.DELEGATION for message in messages
+        ),
+        "total_messages": len(messages),
+        "group_mechanism_activated": bool(task_ids and all(closed_loops)),
+    }
+
+
 def evaluate_experiment(
     *,
     traces_by_condition: dict[str, list[DecisionTrace]],
     results_by_condition: dict[str, list[TaskResult]],
+    messages_by_condition: dict[str, list[GroupMessage]] | None = None,
 ) -> dict[str, Any]:
     if "runtime_fresh" not in traces_by_condition or "runtime_experienced" not in traces_by_condition:
         raise ValueError("fresh and experienced traces are required")
-    return {
+    report = {
         "schema_version": 1,
         "mechanism": mechanism_metrics(
             traces_by_condition["runtime_fresh"],
@@ -99,4 +140,9 @@ def evaluate_experiment(
             for name, results in results_by_condition.items()
         },
     }
-
+    if messages_by_condition is not None:
+        report["group_mechanism"] = {
+            name: group_mechanism_metrics(messages)
+            for name, messages in messages_by_condition.items()
+        }
+    return report

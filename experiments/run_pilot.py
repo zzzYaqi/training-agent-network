@@ -90,19 +90,23 @@ def main() -> None:
 
     results_by_condition = {}
     traces_by_condition = {}
+    messages_by_condition = {}
     for name, coordinator in coordinators.items():
         results, traces = run_condition(name, coordinator, tasks)
         results_by_condition[name] = results
         traces_by_condition[name] = traces
+        messages_by_condition[name] = list(coordinator.group.messages)
 
     report = evaluate_experiment(
         traces_by_condition=traces_by_condition,
         results_by_condition=results_by_condition,
+        messages_by_condition=messages_by_condition,
     )
     report["conditions"] = {
         name: {
             "results": [result.to_dict() for result in results_by_condition[name]],
             "traces": [trace.to_dict() for trace in traces_by_condition[name]],
+            "messages": [message.to_dict() for message in messages_by_condition[name]],
         }
         for name in coordinators
     }
@@ -115,6 +119,10 @@ def main() -> None:
     print("Training Agent Network — deterministic pilot")
     print(f"mechanism activated: {report['mechanism']['mechanism_activated']}")
     print(f"action change rate: {report['mechanism']['action_change_rate']:.1%}")
+    print(
+        "group closed-loop rate: "
+        f"{report['group_mechanism']['runtime_experienced']['closed_loop_rate']:.1%}"
+    )
     for name in coordinators:
         coordination = report["coordination"][name]
         outcome = report["outcome"][name]
@@ -129,4 +137,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

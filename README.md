@@ -1,7 +1,7 @@
 # Training an Agent Network
 
-A minimal, auditable implementation for testing whether verified coordination
-experience changes later runtime decisions.
+A minimal, auditable implementation for testing how agents form a shared task
+group and whether verified coordination experience changes later decisions.
 
 The first version deliberately tests a narrow claim:
 
@@ -10,7 +10,24 @@ The first version deliberately tests a narrow claim:
 > does that change coordination cost or task outcome?
 
 It does **not** yet claim topology evolution, policy learning, or end-to-end
-self-evolution.
+self-evolution. The included workload adapters are integration contracts, not
+completed leaderboard submissions.
+
+## Shared group protocol
+
+Every coordinator, verifier, and worker joins one bounded group. Work then
+produces an append-only event stream:
+
+```text
+task_posted -> proposal -> commitment -> result -> verification
+                                  |
+                                  +-> delegation (after a rejected result)
+```
+
+The group is deliberately policy-neutral. It records membership and messages;
+the Design-Time or Runtime policy still controls ranking. This separation lets
+the evaluator check whether collaboration actually occurred instead of trusting
+a method name such as `rac.full`.
 
 ## Experimental conditions
 
@@ -38,6 +55,21 @@ The evaluator reports three layers:
 2. **Coordination** — first-choice success, calls, reroutes, and recovery.
 3. **Outcome** — verified task success, cost units, and latency.
 
+The group activation check additionally requires a complete observable loop of
+task, proposal, commitment, result, and verification events for every task.
+
+## Real workload seams
+
+- `adapters/bug_finding.py` defines a reproducible bug claim and requires an
+  independent adjudicator after basic evidence-completeness checks.
+- `adapters/programbench.py` accepts scores from the official ProgramBench
+  evaluator. Only 100% behavioral-test completion becomes a passing verifier
+  outcome; partial pass rate remains diagnostic metadata.
+
+Neither adapter fabricates benchmark results or embeds hidden tests. The next
+integration step is to connect these contracts to the team's existing
+bug-finding runner and the official ProgramBench containers.
+
 ## Run the zero-API pilot
 
 Python 3.10+ is sufficient; the package has no runtime dependencies.
@@ -63,10 +95,13 @@ python -m unittest discover -s tests -v
 
 ```text
 src/training_agent_network/
+  messages.py      collaboration message vocabulary
+  group.py         membership and append-only shared message log
   evidence.py      verified evidence and checkpoints
   policies.py      frozen and runtime routing policies
   runtime.py       attributable coordination loop
   evaluation.py    mechanism, coordination, outcome metrics
+  adapters/        Bug Finding and ProgramBench integration contracts
 experiments/
   run_pilot.py     deterministic paired pilot
 tests/             unit tests
@@ -79,4 +114,3 @@ measurement pipeline can attribute a changed action to consumed verified
 evidence. It does not establish real-world benchmark gains. Later benchmark
 adapters should preserve the same conditions, external verifier, task order,
 budget, and trace schema.
-
